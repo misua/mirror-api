@@ -1,0 +1,56 @@
+trigger:
+  branches:
+    include:
+      - '*'  # Run on all branches
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+stages:
+  # Stage 1: Always run tests on every branch
+  - stage: Test
+    displayName: 'Run Tests'
+    jobs:
+      - job: RunTests
+        displayName: 'Run pytest'
+        steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '3.11'
+            displayName: 'Use Python 3.11'
+
+          - script: |
+              python -m pip install --upgrade pip
+              pip install -r requirements.txt
+            displayName: 'Install dependencies'
+
+          - script: |
+              pytest -v --junitxml=test-results.xml
+            displayName: 'Run tests'
+
+          - task: PublishTestResults@2
+            condition: always()
+            inputs:
+              testResultsFiles: 'test-results.xml'
+              testRunTitle: 'Python Tests'
+            displayName: 'Publish test results'
+
+  # Stage 2: Build and push Docker image (ONLY on main branch, ONLY if tests pass)
+  - stage: BuildAndPush
+    displayName: 'Build & Push Docker Image'
+    dependsOn: Test
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - job: BuildDocker
+        displayName: 'Build and push to ACR'
+        steps:
+          - task: Docker@2
+            displayName: 'Build and push to ACR'
+            inputs:
+              command: 'buildAndPush'
+              containerRegistry: 'ACR-ServiceConnection'  # Create this service connection in Azure DevOps
+              repository: 'mirror-api'
+              dockerfile: '$(Build.SourcesDirectory)/Dockerfile'
+              tags: |
+                $(Build.SourceVersion)
+                latest
