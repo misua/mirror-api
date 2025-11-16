@@ -9,9 +9,20 @@ async def get_db_pool() -> Optional[asyncpg.Pool]:
     """
     db_url = os.getenv("DATABASE_URL")
     
+    # If DATABASE_URL not set, try to build it from individual components
     if not db_url:
-        print("⚠️  No DATABASE_URL set - running without database")
-        return None
+        db_user = os.getenv("DB_USER")
+        db_password = os.getenv("DB_PASSWORD")
+        db_host = os.getenv("DB_HOST", "localhost")
+        db_port = os.getenv("DB_PORT", "5432")
+        db_name = os.getenv("DB_NAME", "mirrordb")
+        
+        if db_user and db_password:
+            db_url = f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
+            print(f"✅ Built DATABASE_URL from components")
+        else:
+            print("⚠️  No DATABASE_URL or DB credentials set - running without database")
+            return None
     
     try:
         pool = await asyncpg.create_pool(db_url, min_size=2, max_size=10)
